@@ -11,7 +11,7 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let pty_state = std::sync::Arc::new(std::sync::Mutex::new(pty::PtyState { pty_master: None }));
+    let pty_state = std::sync::Arc::new(std::sync::Mutex::new(pty::PtyState { pty_master: None, pty_writer: None }));
 
     tauri::Builder::default()
         .setup(|app| {

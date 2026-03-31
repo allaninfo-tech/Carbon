@@ -1,11 +1,12 @@
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use std::sync::{Arc, Mutex};
 use std::io::{Read, Write};
-use tauri::{Emitter, Listener, Manager};
+use tauri::Emitter;
 use std::thread;
 
 pub struct PtyState {
     pub pty_master: Option<Box<dyn portable_pty::MasterPty + Send>>,
+    pub pty_writer: Option<Box<dyn std::io::Write + Send>>,
 }
 
 #[tauri::command]
@@ -30,6 +31,8 @@ pub fn spawn_pty(
     let cmd = "bash"; // or dynamically detect
 
     let mut cmd_builder = CommandBuilder::new(cmd);
+    #[cfg(target_os = "windows")]
+    cmd_builder.args(["-NoLogo"]);
     
     // Inject the local proxy URL for Claude Code.
     cmd_builder.env("ANTHROPIC_BASE_URL", "http://127.0.0.1:14201");
@@ -39,11 +42,13 @@ pub fn spawn_pty(
     let _child = pair.slave.spawn_command(cmd_builder).map_err(|e| e.to_string())?;
     
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
+    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
     
     // Store master pty to be able to write and resize
     {
         let mut st = state.lock().unwrap();
         st.pty_master = Some(pair.master);
+        st.pty_writer = Some(writer);
     }
 
     let window_clone = window.clone();
@@ -68,10 +73,8 @@ pub fn pty_write(
     state: tauri::State<'_, Arc<Mutex<PtyState>>>,
 ) -> Result<(), String> {
     let mut st = state.lock().unwrap();
-    if let Some(ref mut master) = st.pty_master {
-        if let Ok(mut writer) = master.try_clone_writer() {
-            let _ = writer.write_all(data.as_bytes());
-        }
+    if let Some(ref mut writer) = st.pty_writer {
+        let _ = writer.write_all(data.as_bytes());
     }
     Ok(())
 }

@@ -2,20 +2,46 @@
   <div class="file-tree-item">
     <div
       class="file-row"
-      :class="{ active: isExpanded && item.isDir }"
-      :style="{ paddingLeft: depth * 14 + 8 + 'px' }"
+      :class="{ 'is-dir-open': item.isDir && isExpanded }"
+      :style="{ paddingLeft: depth * 12 + 8 + 'px' }"
       @click="toggle"
     >
+      <!-- Expand/collapse arrow or file dot -->
       <span class="file-icon">
-        <span v-if="item.isDir">{{ isExpanded ? '▾' : '▸' }}</span>
-        <span v-else>·</span>
+        <svg v-if="item.isDir" viewBox="0 0 10 10" width="9" height="9" fill="none">
+          <path
+            d="M3 4l2 2 2-2"
+            :transform="isExpanded ? '' : 'rotate(-90 5 5)'"
+            stroke="currentColor"
+            stroke-width="1.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <svg v-else viewBox="0 0 10 10" width="7" height="7" fill="none">
+          <rect x="1.5" y="1" width="5.5" height="7" rx="1" stroke="currentColor" stroke-width="1" fill="none"/>
+          <path d="M3 3.5h3M3 5.5h2" stroke="currentColor" stroke-width="0.8" stroke-linecap="round"/>
+        </svg>
       </span>
-      <span class="file-name" :class="{ dir: item.isDir }">{{ item.name }}</span>
+
+      <!-- Name -->
+      <span class="file-name" :class="{ 'is-dir': item.isDir }">{{ item.name }}</span>
+
+      <!-- Git stat badge -->
       <span v-if="stat" class="git-stat">
-        <span v-if="stat.added" class="add">+{{ stat.added }}</span>
-        <span v-if="stat.deleted" class="del">-{{ stat.deleted }}</span>
+        <span v-if="stat.added" class="git-add">+{{ stat.added }}</span>
+        <span v-if="stat.deleted" class="git-del">-{{ stat.deleted }}</span>
       </span>
+
+      <!-- Add to Context button (hover) -->
+      <button v-if="!item.isDir" class="add-ctx-btn" @click.stop="addContext" title="Add to Context">
+        <svg viewBox="0 0 12 12" width="10" height="10" fill="none">
+          <path d="M6 2v8M2 6h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
+
+    <!-- Children (recursion) -->
     <template v-if="item.isDir && isExpanded && item.children">
       <FileTreeItem
         v-for="child in item.children"
@@ -30,6 +56,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useAppStore } from '../stores/app'
 
 interface FileEntry {
   name: string
@@ -45,15 +72,21 @@ const props = withDefaults(defineProps<{
 }>(), { depth: 0 })
 
 const isExpanded = ref(false)
+const store = useAppStore()
 
 const stat = computed(() => {
-  // Normalize path separators
   const normalPath = props.item.path.replace(/\\/g, '/')
   return props.gitStats[normalPath] || null
 })
 
 function toggle() {
   if (props.item.isDir) isExpanded.value = !isExpanded.value
+}
+
+function addContext() {
+  // Approximate standard token count for the UI mock
+  const simTokens = Math.floor(Math.random() * 800) + 100
+  store.addToContext({ path: props.item.path, tokens: simTokens })
 }
 </script>
 
@@ -66,36 +99,68 @@ function toggle() {
   cursor: pointer;
   border-radius: 4px;
   transition: background 0.1s;
-  min-height: 24px;
+  min-height: 22px;
+  margin: 0 4px;
+  position: relative;
 }
-.file-row:hover { background: #1e2233; }
-.file-row.active { background: #1e2233; }
+.file-row:hover { background: var(--bg-surface-2); }
+.file-row.is-dir-open { background: rgba(79,156,249,0.04); }
 
 .file-icon {
-  font-size: 11px;
-  color: #4b5563;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 12px;
-  text-align: center;
   flex-shrink: 0;
+  color: var(--text-muted);
 }
 
 .file-name {
   flex: 1;
-  font-size: 0.8rem;
-  color: #8b949e;
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.file-name.dir { color: #e0e6ed; font-weight: 500; }
+.file-name.is-dir {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
 
 .git-stat {
   display: flex;
-  gap: 4px;
-  font-size: 0.7rem;
-  font-family: 'Cascadia Code', monospace;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
   flex-shrink: 0;
 }
-.git-stat .add { color: #2ea043; }
-.git-stat .del { color: #da3633; }
+
+.git-add { color: var(--accent-teal); }
+.git-del { color: var(--accent-red); }
+
+.add-ctx-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: var(--bg-surface-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.1s;
+}
+.file-row:hover .add-ctx-btn {
+  display: flex;
+}
+.add-ctx-btn:hover {
+  color: var(--accent-blue);
+  border-color: rgba(79,156,249,0.3);
+  background: rgba(79,156,249,0.1);
+}
 </style>

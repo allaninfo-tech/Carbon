@@ -1,20 +1,40 @@
 <template>
   <div class="explorer-panel">
+    <!-- Header -->
     <div class="panel-header">
-      <span class="header-icon">📁</span>
-      <span>Explorer</span>
-      <button class="header-btn" title="Open project folder" @click="openFolder">+</button>
+      <svg class="header-icon" viewBox="0 0 16 16" fill="none">
+        <path d="M1.5 3.5A1 1 0 012.5 2.5h4l1.5 1.5H13a1 1 0 011 1v7a1 1 0 01-1 1H2.5a1 1 0 01-1-1v-7z" stroke="currentColor" stroke-width="1.2" fill="none"/>
+      </svg>
+      <span class="header-title">Explorer</span>
+      <button class="header-btn" title="Open project folder" @click="openFolder">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none">
+          <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
 
+    <!-- File tree -->
     <div class="panel-content">
       <div v-if="!store.projectPath" class="empty-state">
-        <div class="empty-icon">📂</div>
-        <p>No project open</p>
+        <div class="empty-icon">
+          <svg viewBox="0 0 40 40" fill="none" width="36" height="36">
+            <rect x="2" y="8" width="36" height="27" rx="3" stroke="currentColor" stroke-width="1.5" fill="none" opacity="0.3"/>
+            <path d="M2 14h36" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+            <path d="M2 11a3 3 0 013-3h7l3 3H35a3 3 0 013 3v18a3 3 0 01-3 3H5a3 3 0 01-3-3V11z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          </svg>
+        </div>
+        <p class="empty-label">No project open</p>
         <button class="open-btn" @click="openFolder">Open Folder</button>
       </div>
 
       <div v-else class="file-tree">
-        <div class="project-name">{{ projectName }}</div>
+        <div class="project-name">
+          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" class="project-icon">
+            <circle cx="6" cy="6" r="5" stroke="var(--accent-teal)" stroke-width="1.2" fill="none"/>
+            <circle cx="6" cy="6" r="2" fill="var(--accent-teal)"/>
+          </svg>
+          {{ projectName }}
+        </div>
         <FileTreeItem
           v-for="item in fileTree"
           :key="item.path"
@@ -24,21 +44,40 @@
       </div>
     </div>
 
-    <!-- Context budget mini bar -->
-    <div class="context-footer">
-      <div class="context-label">
-        <span>Context</span>
-        <span :class="['context-pct', contextClass]">{{ store.contextPercent }}%</span>
+    <!-- Active Context Section -->
+    <div class="context-section">
+      <button class="context-section-header" @click="store.contextSectionOpen = !store.contextSectionOpen">
+        <svg class="collapse-arrow" :class="{ open: store.contextSectionOpen }" viewBox="0 0 12 12" width="10" height="10" fill="none">
+          <path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="section-title">Active Context</span>
+        <span class="context-chip-count">{{ store.contextFiles.length }}</span>
+      </button>
+
+      <div v-if="store.contextSectionOpen" class="context-chips">
+        <div v-if="store.contextFiles.length === 0" class="ctx-empty">
+          No files in memory
+        </div>
+        <div v-for="f in store.contextFiles" :key="f.path" class="ctx-chip">
+          <span class="ctx-chip-name">{{ basename(f.path) }}</span>
+          <span class="ctx-chip-tokens">{{ formatTok(f.tokens) }}</span>
+          <button class="ctx-chip-remove" @click="store.removeFromContext(f.path)" title="Remove from context">
+            <svg viewBox="0 0 10 10" width="8" height="8" fill="none">
+              <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
-      <div class="context-bar-track">
-        <div
-          class="context-bar-fill"
-          :style="{ width: store.contextPercent + '%' }"
-          :class="contextClass"
-        />
-      </div>
-      <div class="context-numbers">
-        {{ formatNum(store.contextTokens) }} / {{ formatNum(store.contextLimit) }} tok
+
+      <!-- Context chart -->
+      <div v-if="store.contextSectionOpen" class="ctx-chart-wrapper">
+        <div class="ctx-chart-container">
+          <Doughnut :data="chartData" :options="chartOptions" />
+          <div class="ctx-chart-center">
+            <span class="ctx-center-val" :class="contextClass">{{ store.contextPercent }}%</span>
+            <span class="ctx-center-lbl">USED</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -47,9 +86,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { open } from '@tauri-apps/plugin-opener'
 import { useAppStore } from '../stores/app'
 import FileTreeItem from './FileTreeItem.vue'
+import { Chart as ChartJS, ArcElement, Tooltip as ChartTooltip } from 'chart.js'
+import { Doughnut } from 'vue-chartjs'
+
+ChartJS.register(ArcElement, ChartTooltip)
 
 const store = useAppStore()
 
@@ -75,23 +117,61 @@ const contextClass = computed(() => {
   return 'ok'
 })
 
-function formatNum(n: number) {
+const chartData = computed(() => {
+  const cTheme = 
+    contextClass.value === 'danger' ? '#ef4444' :
+    contextClass.value === 'warning' ? '#f59e0b' : '#1ecfa0';
+    
+  return {
+    labels: ['Used', 'Available'],
+    datasets: [
+      {
+        backgroundColor: [cTheme, 'rgba(255,255,255,0.04)'],
+        borderColor: ['transparent', 'transparent'],
+        data: [store.contextTokens, Math.max(0, store.contextLimit - store.contextTokens)],
+        hoverOffset: 0,
+        cutout: '78%'
+      }
+    ]
+  }
+})
+
+const chartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    tooltip: {
+      enabled: true,
+      backgroundColor: 'rgba(17, 21, 32, 0.9)',
+      titleFont: { family: 'Inter', size: 10 },
+      bodyFont: { family: 'JetBrains Mono', size: 11 },
+      padding: 8,
+      borderColor: 'rgba(255,255,255,0.1)',
+      borderWidth: 1,
+      displayColors: false
+    }
+  },
+  animation: {
+    animateScale: true,
+    animateRotate: true
+  }
+}
+
+function formatTok(n: number) {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
   return String(n)
 }
 
+function basename(p: string) {
+  return p.replace(/\\/g, '/').split('/').pop() || p
+}
+
 async function openFolder() {
-  try {
-    // Use Tauri dialog to pick a folder (plugin-dialog if available, else prompt)
-    // For now we use a simple prompt as dialog plugin may not be installed
-    const path = prompt('Enter project path:')
-    if (!path) return
-    store.setProjectPath(path)
-    await loadFileTree(path)
-    refreshGitStats()
-  } catch (e) {
-    console.error('openFolder error', e)
-  }
+  const path = prompt('Enter project path:')
+  if (!path) return
+  store.setProjectPath(path)
+  await loadFileTree(path)
+  refreshGitStats()
 }
 
 async function loadFileTree(dir: string) {
@@ -99,7 +179,6 @@ async function loadFileTree(dir: string) {
     const result = await invoke<FileEntry[]>('list_dir', { path: dir })
     fileTree.value = result
   } catch {
-    // Fallback: show a placeholder - list_dir not yet implemented
     fileTree.value = []
   }
 }
@@ -118,134 +197,270 @@ onMounted(() => {
     loadFileTree(store.projectPath)
     refreshGitStats()
   }
-  // Poll git stats every 5s
   setInterval(refreshGitStats, 5000)
 })
 </script>
 
 <style scoped>
 .explorer-panel {
-  width: 280px;
-  min-width: 200px;
-  max-width: 400px;
-  background: #161925;
-  border-right: 1px solid #272a38;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-surface-1);
+  border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
+  overflow: hidden;
 }
 
+/* Header */
 .panel-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #8b949e;
-  border-bottom: 1px solid #272a38;
+  padding: 0 12px;
+  height: 36px;
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
 
-.header-icon { font-size: 13px; }
+.header-icon {
+  width: 13px;
+  height: 13px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.header-title {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  flex: 1;
+}
 
 .header-btn {
-  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: none;
-  border: none;
-  color: #4b5563;
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  padding: 2px 6px;
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
   transition: all 0.15s;
+  flex-shrink: 0;
 }
-.header-btn:hover { color: #e0e6ed; background: #272a38; }
+.header-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-mid);
+  background: var(--bg-surface-2);
+}
 
+/* Content */
 .panel-content {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 0;
+  min-height: 0;
 }
 
+/* Empty state */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
-  gap: 12px;
-  color: #4b5563;
-  padding: 32px 16px;
+  gap: 10px;
+  padding: 24px 16px;
   text-align: center;
 }
 
-.empty-icon { font-size: 36px; }
+.empty-icon { color: var(--text-muted); }
+.empty-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
 
 .open-btn {
-  background: #3b82f6;
-  color: white;
+  background: var(--accent-blue);
+  color: #fff;
   border: none;
   border-radius: 6px;
-  padding: 8px 16px;
-  font-size: 0.85rem;
+  padding: 7px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: opacity 0.15s;
 }
-.open-btn:hover { background: #2563eb; }
+.open-btn:hover { opacity: 0.85; }
+
+/* File tree */
+.file-tree { padding: 6px 0; }
 
 .project-name {
-  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
   font-weight: 700;
-  color: #e0e6ed;
-  padding: 6px 14px;
+  color: var(--text-secondary);
+  padding: 4px 12px 6px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }
+.project-icon { flex-shrink: 0; }
 
-/* Context footer */
-.context-footer {
-  padding: 12px 14px;
-  border-top: 1px solid #272a38;
+/* ━━━ Active Context Section ━━━ */
+.context-section {
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface-1);
   flex-shrink: 0;
 }
 
-.context-label {
+.context-section-header {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.15s;
+}
+.context-section-header:hover { color: var(--text-secondary); }
+
+.collapse-arrow {
+  color: var(--text-muted);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+.collapse-arrow.open { transform: rotate(0deg); }
+.collapse-arrow:not(.open) { transform: rotate(-90deg); }
+
+.section-title {
+  font-size: 0.67rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex: 1;
+  text-align: left;
+}
+
+.context-chip-count {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  background: var(--bg-surface-3);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+/* Context chips */
+.context-chips {
+  padding: 0 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.ctx-empty {
   font-size: 0.72rem;
-  color: #8b949e;
-  margin-bottom: 6px;
+  color: var(--text-muted);
+  padding: 2px 2px 4px;
+  font-style: italic;
 }
 
-.context-pct.ok { color: #2ea043; }
-.context-pct.warning { color: #f59e0b; }
-.context-pct.danger { color: #da3633; }
+.ctx-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 4px 8px;
+  transition: border-color 0.15s;
+}
+.ctx-chip:hover { border-color: var(--border-mid); }
 
-.context-bar-track {
-  height: 4px;
-  background: #272a38;
-  border-radius: 2px;
+.ctx-chip-name {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-secondary);
   overflow: hidden;
-  margin-bottom: 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.context-bar-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.4s ease, background 0.3s;
+.ctx-chip-tokens {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--accent-teal);
+  flex-shrink: 0;
 }
-.context-bar-fill.ok { background: #2ea043; }
-.context-bar-fill.warning { background: #f59e0b; }
-.context-bar-fill.danger { background: #da3633; }
 
-.context-numbers {
-  font-size: 0.7rem;
-  color: #4b5563;
-  text-align: right;
-  font-family: 'Cascadia Code', monospace;
+.ctx-chip-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 3px;
+  transition: all 0.12s;
+  flex-shrink: 0;
+}
+.ctx-chip-remove:hover { color: var(--accent-red); background: rgba(239,68,68,0.1); }
+
+/* Context chart replacing bar */
+.ctx-chart-wrapper {
+  padding: 12px 16px 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.ctx-chart-container {
+  position: relative;
+  width: 110px;
+  height: 110px;
+}
+
+.ctx-chart-center {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.ctx-center-val {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.ctx-center-val.ok      { color: var(--accent-teal); }
+.ctx-center-val.warning { color: var(--accent-amber); }
+.ctx-center-val.danger  { color: var(--accent-red); }
+
+.ctx-center-lbl {
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 </style>

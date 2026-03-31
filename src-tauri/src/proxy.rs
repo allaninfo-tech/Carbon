@@ -9,7 +9,7 @@ use axum::{
 use reqwest::Client;
 use serde_json::Value;
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, Emitter};
+use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 use tauri_plugin_store::StoreExt;
 
