@@ -11,7 +11,7 @@ pub struct FileEntry {
 
 #[tauri::command]
 pub fn list_dir(path: String, depth: Option<u8>) -> Result<Vec<FileEntry>, String> {
-    let max_depth = depth.unwrap_or(2);
+    let max_depth = depth.unwrap_or(8);
     read_dir_recursive(&path, 0, max_depth)
 }
 

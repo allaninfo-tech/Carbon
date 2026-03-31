@@ -2,15 +2,13 @@
   <div class="explorer-panel">
     <!-- Header -->
     <div class="panel-header">
-      <svg class="header-icon" viewBox="0 0 16 16" fill="none">
-        <path d="M1.5 3.5A1 1 0 012.5 2.5h4l1.5 1.5H13a1 1 0 011 1v7a1 1 0 01-1 1H2.5a1 1 0 01-1-1v-7z" stroke="currentColor" stroke-width="1.2" fill="none"/>
-      </svg>
-      <span class="header-title">Explorer</span>
-      <button class="header-btn" title="Open project folder" @click="openFolder">
-        <svg viewBox="0 0 16 16" width="13" height="13" fill="none">
-          <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-      </button>
+      <div class="header-indicator"></div>
+      <span class="header-title">CARBON_FS_v2.4</span>
+      <div class="header-actions">
+        <button class="header-btn" title="Open project folder" @click="openFolder">
+          <FolderPlus :size="14" />
+        </button>
+      </div>
     </div>
 
     <!-- File tree -->
@@ -86,8 +84,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-dialog'
 import { useAppStore } from '../stores/app'
 import FileTreeItem from './FileTreeItem.vue'
+import { FolderPlus } from 'lucide-vue-next'
 import { Chart as ChartJS, ArcElement, Tooltip as ChartTooltip } from 'chart.js'
 import { Doughnut } from 'vue-chartjs'
 
@@ -167,11 +167,17 @@ function basename(p: string) {
 }
 
 async function openFolder() {
-  const path = prompt('Enter project path:')
-  if (!path) return
-  store.setProjectPath(path)
-  await loadFileTree(path)
-  refreshGitStats()
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    title: 'Select Project Root'
+  })
+  
+  if (selected && typeof selected === 'string') {
+    store.setProjectPath(selected)
+    await loadFileTree(selected)
+    refreshGitStats()
+  }
 }
 
 async function loadFileTree(dir: string) {
@@ -205,7 +211,8 @@ onMounted(() => {
 .explorer-panel {
   width: 100%;
   height: 100%;
-  background: var(--bg-surface-1);
+  background: rgba(var(--bg-surface-1-rgb), 0.7);
+  backdrop-filter: blur(24px);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
@@ -216,48 +223,55 @@ onMounted(() => {
 .panel-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  height: 36px;
+  gap: 12px;
+  padding: 0 16px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
 
-.header-icon {
-  width: 13px;
-  height: 13px;
-  color: var(--text-muted);
-  flex-shrink: 0;
+.header-indicator {
+  width: 3px;
+  height: 14px;
+  background: var(--accent-blue);
+  border-radius: 4px;
+  box-shadow: 0 0 8px var(--accent-blue);
 }
 
 .header-title {
-  font-family: var(--font-ui);
-  font-size: 0.68rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--text-primary);
   flex: 1;
 }
 
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .header-btn {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: none;
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
+  border-radius: 6px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s;
   flex-shrink: 0;
-}
-.header-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--border-mid);
-  background: var(--bg-surface-2);
+
+  &:hover {
+    color: var(--accent-blue);
+    border-color: rgba(79, 156, 249, 0.3);
+    background: rgba(79, 156, 249, 0.05);
+  }
 }
 
 /* Content */

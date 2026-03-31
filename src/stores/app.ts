@@ -28,6 +28,13 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: number
+  latency?: number
+}
+
+export interface SessionStats {
+  tokensUsed: number
+  lastLatency: number
+  totalProjectContext: number
 }
 
 export const useAppStore = defineStore('app', () => {
@@ -111,21 +118,6 @@ export const useAppStore = defineStore('app', () => {
       tpmLimit: 10000,
       usagePercent: 99,
     },
-    {
-      id: 'mist-1',
-      provider: 'Mistral',
-      label: 'Pixtral-12B',
-      key: 'sk-mist-...',
-      url: 'https://api.mistral.ai/v1/chat/completions',
-      model_id: 'pixtral-12b',
-      status: 'idle',
-      requestCount: 0,
-      rpm: 0,
-      rpmLimit: 10,
-      tpm: 0,
-      tpmLimit: 20000,
-      usagePercent: 0,
-    }
   ])
   const activeKeyIndex = ref(0)
   const flashingKeyId = ref<string | null>(null)
@@ -147,6 +139,11 @@ export const useAppStore = defineStore('app', () => {
   // ── Chat ──
   const chatMessages = ref<ChatMessage[]>([])
   const chatLoading = ref(false)
+  const sessionStats = ref<SessionStats>({
+    tokensUsed: 0,
+    lastLatency: 0,
+    totalProjectContext: 0
+  })
 
   // ── Modals ──
   const cmdPaletteOpen = ref(false)
@@ -216,8 +213,7 @@ export const useAppStore = defineStore('app', () => {
       { id: 'oai-1', provider: 'OpenAI', label: 'GPT-4o Reasoning', key: '...', url: '', model_id: 'gpt-4o', status: 'active', requestCount: 850, rpm: 4, rpmLimit: 100, tpm: 120000, tpmLimit: 150000, usagePercent: 80 },
       { id: 'gem-1', provider: 'Gemini', label: 'Gemini 2.0 Flash', key: '...', url: '', model_id: 'gemini-2.0-flash', status: 'active', requestCount: 3100, rpm: 55, rpmLimit: 60, tpm: 2200, tpmLimit: 10000, usagePercent: 75 },
       { id: 'groq-1', provider: 'Groq', label: 'Llama 3 70B', key: '...', url: '', model_id: 'llama3-70b-8192', status: 'active', requestCount: 42, rpm: 1, rpmLimit: 30, tpm: 4500, tpmLimit: 5000, usagePercent: 90 },
-      { id: 'or-1', provider: 'OpenRouter', label: 'DeepSeek V3', key: '...', url: '', model_id: 'deepseek/deepseek-v3', status: 'rate-limited', requestCount: 12000, rpm: 20, rpmLimit: 20, tpm: 9950, tpmLimit: 10000, usagePercent: 99 },
-      { id: 'mist-1', provider: 'Mistral', label: 'Mistral Large', key: '...', url: '', model_id: 'mistral-large-latest', status: 'idle', requestCount: 0, rpm: 0, rpmLimit: 10, tpm: 0, tpmLimit: 20000, usagePercent: 2 }
+      { id: 'or-1', provider: 'OpenRouter', label: 'DeepSeek V3', key: '...', url: '', model_id: 'deepseek/deepseek-v3', status: 'rate-limited', requestCount: 12000, rpm: 20, rpmLimit: 20, tpm: 9950, tpmLimit: 10000, usagePercent: 99 }
     ]
   }
 
@@ -271,6 +267,7 @@ export const useAppStore = defineStore('app', () => {
     activeKeyCount,
     chatMessages,
     chatLoading,
+    sessionStats,
     cmdPaletteOpen,
     settingsOpen,
     projectPath,
@@ -291,6 +288,6 @@ export const useAppStore = defineStore('app', () => {
   }
 }, {
   persist: {
-    pick: ['apiKeys', 'activeKeyIndex', 'contextLimit', 'projectPath', 'activeActivity', 'sidebarOpen']
+    pick: ['apiKeys', 'activeKeyIndex', 'contextLimit', 'projectPath', 'activeActivity', 'sidebarOpen', 'chatMessages', 'sessionStats']
   }
 } as any)

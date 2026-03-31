@@ -608,6 +608,15 @@ function getMockChartData(seed: number) {
 
 @media (max-width: 800px) {
   .add-form-expanded { grid-column: span 1; flex-direction: column !important; }
+  .header-content { flex-direction: column; align-items: flex-start; gap: 20px; }
+  .header-actions { width: 100%; justify-content: flex-start; gap: 16px; }
+}
+
+@media (max-width: 600px) {
+  .pools-dashboard-overlay { padding: 20px; }
+  .dashboard-title { font-size: 1.4rem; }
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .add-form-preview { display: none; }
 }
 
 .add-form-left {

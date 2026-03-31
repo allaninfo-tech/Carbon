@@ -8,20 +8,8 @@
     >
       <!-- Expand/collapse arrow or file dot -->
       <span class="file-icon">
-        <svg v-if="item.isDir" viewBox="0 0 10 10" width="9" height="9" fill="none">
-          <path
-            d="M3 4l2 2 2-2"
-            :transform="isExpanded ? '' : 'rotate(-90 5 5)'"
-            stroke="currentColor"
-            stroke-width="1.2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-        <svg v-else viewBox="0 0 10 10" width="7" height="7" fill="none">
-          <rect x="1.5" y="1" width="5.5" height="7" rx="1" stroke="currentColor" stroke-width="1" fill="none"/>
-          <path d="M3 3.5h3M3 5.5h2" stroke="currentColor" stroke-width="0.8" stroke-linecap="round"/>
-        </svg>
+        <Folder v-if="item.isDir" :size="14" class="icon-folder" />
+        <File v-else :size="14" class="icon-file" />
       </span>
 
       <!-- Name -->
@@ -57,6 +45,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useAppStore } from '../stores/app'
+import { Folder, File } from 'lucide-vue-next'
 
 interface FileEntry {
   name: string
@@ -110,23 +99,33 @@ function addContext() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 12px;
+  width: 16px;
   flex-shrink: 0;
-  color: var(--text-muted);
+}
+
+.icon-folder {
+  color: #f59e0b; /* Amber */
+  filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.2));
+}
+
+.icon-file {
+  color: #8892a4; /* Muted Blue-Grey */
 }
 
 .file-name {
   flex: 1;
   font-family: var(--font-mono);
-  font-size: 0.73rem;
-  color: var(--text-muted);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .file-name.is-dir {
-  color: var(--text-secondary);
-  font-weight: 500;
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .git-stat {
