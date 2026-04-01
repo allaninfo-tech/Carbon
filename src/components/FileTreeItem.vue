@@ -7,7 +7,7 @@
       @click="toggle"
     >
       <!-- Expand/collapse arrow or file dot -->
-      <span class="file-icon">
+      <span class="file-icon" :class="{ 'is-loading': isLoading }">
         <Folder v-if="item.isDir" :size="14" class="icon-folder" />
         <File v-else :size="14" class="icon-file" />
       </span>
@@ -44,6 +44,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import { useAppStore } from '../stores/app'
 import { Folder, File } from 'lucide-vue-next'
 
@@ -61,6 +62,7 @@ const props = withDefaults(defineProps<{
 }>(), { depth: 0 })
 
 const isExpanded = ref(false)
+const isLoading = ref(false)
 const store = useAppStore()
 
 const stat = computed(() => {
@@ -68,8 +70,24 @@ const stat = computed(() => {
   return props.gitStats[normalPath] || null
 })
 
-function toggle() {
-  if (props.item.isDir) isExpanded.value = !isExpanded.value
+async function toggle() {
+  if (!props.item.isDir) return
+
+  const childrenCount = props.item.children?.length || 0
+  
+  if (!isExpanded.value && childrenCount === 0) {
+    isLoading.value = true
+    try {
+      const newChildren = await invoke<FileEntry[]>('list_dir', { path: props.item.path })
+      props.item.children = newChildren
+    } catch (e) {
+      console.error('Failed to load children:', e)
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  isExpanded.value = !isExpanded.value
 }
 
 function addContext() {
@@ -101,6 +119,17 @@ function addContext() {
   justify-content: center;
   width: 16px;
   flex-shrink: 0;
+  transition: opacity 0.2s;
+  
+  &.is-loading {
+    opacity: 0.5;
+    animation: pulse-icon 1s infinite ease-in-out;
+  }
+}
+
+@keyframes pulse-icon {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.1); opacity: 0.8; }
 }
 
 .icon-folder {

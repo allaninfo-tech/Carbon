@@ -44,6 +44,21 @@ export const useAppStore = defineStore('app', () => {
 
   const apiKeys = ref<ApiKey[]>([
     {
+      id: 'gem-real',
+      provider: 'Gemini',
+      label: 'Google Studio (Primary)',
+      key: 'AIzaSyCYuJuYohj5XfpbRc0T4gtncFxPdxHEpls',
+      url: 'https://generativelanguage.googleapis.com/v1beta/models',
+      model_id: 'gemini-2.0-flash',
+      status: 'active',
+      requestCount: 0,
+      rpm: 0,
+      rpmLimit: 60,
+      tpm: 0,
+      tpmLimit: 1000000,
+      usagePercent: 0,
+    },
+    {
       id: 'ant-1',
       provider: 'Anthropic',
       label: 'Claude 3.7 Tier 4',
@@ -209,10 +224,10 @@ export const useAppStore = defineStore('app', () => {
   // FORCE DUMMIES if empty (bypasses persistence for this testing phase)
   function seedDummyData() {
     apiKeys.value = [
+      { id: 'gem-real', provider: 'Gemini', label: 'Google Studio (Primary)', key: 'AIzaSyCYuJuYohj5XfpbRc0T4gtncFxPdxHEpls', url: '', model_id: 'gemini-2.0-flash', status: 'active', requestCount: 0, rpm: 0, rpmLimit: 60, tpm: 0, tpmLimit: 1000000, usagePercent: 0 },
       { id: 'ant-1', provider: 'Anthropic', label: 'Claude 3.7 Sonnet', key: '...', url: '', model_id: 'claude-3-7-sonnet', status: 'active', requestCount: 1420, rpm: 12, rpmLimit: 50, tpm: 8400, tpmLimit: 40000, usagePercent: 21 },
       { id: 'oai-1', provider: 'OpenAI', label: 'GPT-4o Reasoning', key: '...', url: '', model_id: 'gpt-4o', status: 'active', requestCount: 850, rpm: 4, rpmLimit: 100, tpm: 120000, tpmLimit: 150000, usagePercent: 80 },
-      { id: 'gem-1', provider: 'Gemini', label: 'Gemini 2.0 Flash', key: '...', url: '', model_id: 'gemini-2.0-flash', status: 'active', requestCount: 3100, rpm: 55, rpmLimit: 60, tpm: 2200, tpmLimit: 10000, usagePercent: 75 },
-      { id: 'groq-1', provider: 'Groq', label: 'Llama 3 70B', key: '...', url: '', model_id: 'llama3-70b-8192', status: 'active', requestCount: 42, rpm: 1, rpmLimit: 30, tpm: 4500, tpmLimit: 5000, usagePercent: 90 },
+      { id: 'gem-1', provider: 'Gemini', label: 'Gemini 2.0 Pro', key: '...', url: '', model_id: 'gemini-2.0-pro-exp-02-05', status: 'active', requestCount: 120, rpm: 2, rpmLimit: 5, tpm: 2200, tpmLimit: 10000, usagePercent: 22 },
       { id: 'or-1', provider: 'OpenRouter', label: 'DeepSeek V3', key: '...', url: '', model_id: 'deepseek/deepseek-v3', status: 'rate-limited', requestCount: 12000, rpm: 20, rpmLimit: 20, tpm: 9950, tpmLimit: 10000, usagePercent: 99 }
     ]
   }

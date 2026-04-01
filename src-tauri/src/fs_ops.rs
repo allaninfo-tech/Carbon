@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct FileEntry {
     pub name: String,
     pub path: String,
@@ -11,7 +12,7 @@ pub struct FileEntry {
 
 #[tauri::command]
 pub fn list_dir(path: String, depth: Option<u8>) -> Result<Vec<FileEntry>, String> {
-    let max_depth = depth.unwrap_or(8);
+    let max_depth = depth.unwrap_or(1);
     read_dir_recursive(&path, 0, max_depth)
 }
 

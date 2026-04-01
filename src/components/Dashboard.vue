@@ -716,6 +716,7 @@ async function sendChat() {
   transition: border-color 0.15s, box-shadow 0.15s;
   width: 100%;
   -webkit-appearance: none;
+  appearance: none;
 }
 .form-input:focus {
   border-color: rgba(79, 156, 249, 0.5);

@@ -1,47 +1,6 @@
 <template>
   <div class="terminal-panel" @click="focusTerminal">
-    <!-- Breadcrumb bar -->
-    <div class="breadcrumb-bar">
-      <div class="breadcrumb-left">
-        <span class="status-badge" :class="{ 'is-active': isPtyActive, 'is-booting': isBooting }">
-          <span class="status-dot"></span>
-          {{ isBooting ? 'BOOTING' : (isPtyActive ? 'LIVE' : 'IDLE') }}
-        </span>
-        <span class="crumb-sep">/</span>
-        <span class="crumb agent-crumb">
-          <svg viewBox="0 0 10 10" width="8" height="8" fill="none">
-            <circle cx="5" cy="5" r="4" stroke="var(--accent-teal)" stroke-width="1.2"/>
-            <circle cx="5" cy="5" r="1.5" fill="var(--accent-teal)"/>
-          </svg>
-          Claude Code
-        </span>
-        <span class="crumb-sep">/</span>
-        <span class="crumb model-crumb">{{ activeModel }}</span>
-      </div>
-      
-      <div class="breadcrumb-right">
-        <!-- Dual HCI LEDs -->
-        <div class="telemetry-leds">
-          <div class="led-item" title="Local Link Activity">
-            <span class="led-label">LINK</span>
-            <div class="led-bulb white" :class="{ 'led-flash-white': linkLedBlink }"></div>
-          </div>
-          <div class="led-item" title="Remote Sync Activity">
-            <span class="led-label">SYNC</span>
-            <div class="led-bulb blue" :class="{ 'led-flash-blue': syncLedBlink }"></div>
-          </div>
-        </div>
-        
-        <span class="crumb-sep">|</span>
-        <span v-if="projectPath" class="crumb path-crumb" :class="{ 'is-linking': isTypingPath }" @click.stop="handlePathClick" title="Click to open folder">
-          <svg viewBox="0 0 10 10" width="8" height="8" fill="none" class="path-icon">
-            <path d="M1 4L5 1l4 3v5H1V4z" stroke="currentColor" stroke-width="1" fill="none"/>
-          </svg>
-          <span class="path-text">{{ displayPath }}</span>
-          <span v-if="isTypingPath" class="path-cursor">█</span>
-        </span>
-      </div>
-    </div>
+
 
     <!-- Tab bar for terminal sessions -->
     <div class="tab-bar">
@@ -69,18 +28,19 @@
       
       <div class="tab-bar-spacer" />
       
-      <div class="term-controls">
-        <button class="icon-btn" title="Decrease Font" @click="fontSize = Math.max(10, fontSize - 1)">
-          <svg viewBox="0 0 14 14" width="10" height="10" fill="none"><path d="M2 7h10" stroke="currentColor" stroke-width="1.5"/></svg>
-        </button>
-        <span class="font-size-val">{{ fontSize }}px</span>
-        <button class="icon-btn" title="Increase Font" @click="fontSize = Math.min(20, fontSize + 1)">
-          <svg viewBox="0 0 14 14" width="10" height="10" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" stroke-width="1.5"/></svg>
-        </button>
+      <div class="term-controls-wrapper">
+        <div class="font-stepper">
+          <button class="step-btn" @click="fontSize = Math.max(10, fontSize - 1)">-</button>
+          <div class="font-display">
+            <span class="font-val">{{ fontSize }}</span>
+            <span class="font-unit">PX</span>
+          </div>
+          <button class="step-btn" @click="fontSize = Math.min(20, fontSize + 1)">+</button>
+        </div>
         <div class="sep-v" />
-        <button class="icon-btn" title="Clear terminal" @click="clearTerminal">
+        <button class="action-icon-btn" title="Clear terminal" @click="clearTerminal">
           <svg viewBox="0 0 14 14" width="12" height="12" fill="none">
-            <path d="M2 12L12 2M2 2l10 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            <path d="M2.5 2.5l9 9M11.5 2.5l-9 9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
           </svg>
         </button>
       </div>
@@ -89,8 +49,14 @@
     <!-- Terminal viewport with Tactical Framing -->
     <div 
       class="terminal-viewport-wrapper" 
-      :class="{ 'is-streaming': isPtyActive, 'is-idle': !isPtyActive }"
+      :class="{ 
+        'is-streaming': isPtyActive, 
+        'is-idle': !isPtyActive,
+        'rotation-glitch': rotationGlitch
+      }"
     >
+
+
       <!-- Grid Overlay -->
       <div class="carbon-grid-overlay"></div>
       
@@ -109,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -131,9 +97,20 @@ const isBooting = ref(true)
 const syncLedBlink = ref(false)
 const linkLedBlink = ref(false)
 const fontSize = ref(13)
+const rotationGlitch = ref(false)
 let activityTimeout: ReturnType<typeof setTimeout> | null = null
 let ledTimeout: ReturnType<typeof setTimeout> | null = null
 let linkTimeout: ReturnType<typeof setTimeout> | null = null
+
+// Watch for pool rotation to trigger "Glitch" effect
+watch(() => store.activeKeyIndex, () => {
+  rotationGlitch.value = true
+  setTimeout(() => { rotationGlitch.value = false }, 450)
+})
+
+function focusTerminal() {
+  term?.focus()
+}
 
 // Session management (UI only — single PTY for now)
 interface Session { id: string; label: string }
@@ -146,65 +123,11 @@ function addSession() {
   activeSession.value = id
 }
 
-// Animated Path
-const displayPath = ref('')
-const isTypingPath = ref(false)
-let typingInterval: any = null
-
-function focusTerminal() {
-  term?.focus()
-}
-
-const projectPath = computed(() => store.projectPath)
-const shortPath = computed(() => {
-  const p = store.projectPath
-  if (!p) return ''
-  return '~/' + p.replace(/\\/g, '/').split('/').slice(-2).join('/')
-})
-
-async function animatePath(target: string) {
-  if (typingInterval) clearInterval(typingInterval)
-  isTypingPath.value = true
-  displayPath.value = ''
-  
-  const chars = target.split('')
-  let idx = 0
-  
-  typingInterval = setInterval(() => {
-    if (idx < chars.length) {
-      displayPath.value += chars[idx]
-      idx++
-      // Blink Link LED on each character for "data stream" feel
-      linkLedBlink.value = true
-      setTimeout(() => { linkLedBlink.value = false }, 20)
-    } else {
-      clearInterval(typingInterval)
-      isTypingPath.value = false
-    }
-  }, 30)
-}
-
-watch(shortPath, (newVal) => {
-  if (newVal) animatePath(newVal)
-}, { immediate: true })
-
-const activeModel = computed(() => {
-  const key = store.apiKeys[store.activeKeyIndex]
-  if (!key) return '—'
-  const m = key.model_id || ''
-  return m.includes('/') ? m.split('/').pop()! : m
-})
-
-function handlePathClick() {
-  if (store.projectPath) {
-    invoke('open_path', { path: store.projectPath })
-  }
-}
-
 watch(fontSize, (newVal) => {
   if (term) {
     term.options.fontSize = newVal
     fitAddon?.fit()
+    term.scrollToBottom()
   }
 })
 
@@ -231,6 +154,13 @@ async function runBootSequence() {
   }
   term.writeln('\r\n\x1b[38;2;124;106;249m[BOOT] UI Orchestration Layer Ready.\x1b[0m\r\n')
   isBooting.value = false
+  
+  // Custom shell prompt injection (Tactical style)
+  // We send this right after boot to clean up the CMD/PowerShell output
+  if (navigator.platform.includes('Win')) {
+    invoke('pty_write', { data: 'prompt $E[38;2;30;207;160mCARBON$E[0m $E[38;2;79;156;249m// $E[0m\r' })
+  }
+
   term.focus()
 }
 
@@ -263,12 +193,13 @@ onMounted(async () => {
     },
     fontFamily: '"JetBrains Mono", "Cascadia Code", "Fira Code", monospace',
     fontSize: fontSize.value,
-    lineHeight: 1.5,
+    lineHeight: 1.6,
     cursorBlink: true,
     cursorStyle: 'block',
-    scrollback: 5000,
+    scrollback: 10000,
     convertEol: true,
     allowTransparency: true,
+    letterSpacing: 0.2,
   })
 
   fitAddon = new FitAddon()
@@ -329,16 +260,23 @@ onMounted(async () => {
     } catch {}
   })
   resizeObserver.observe(terminalEl.value)
-})
 
-onBeforeUnmount(() => {
-  unlisten?.()
-  compactUnlisten?.()
-  resizeObserver?.disconnect()
-  term?.dispose()
-  if (activityTimeout) clearTimeout(activityTimeout)
-  if (ledTimeout) clearTimeout(ledTimeout)
-  if (linkTimeout) clearTimeout(linkTimeout)
+  const handleResize = () => {
+    fitAddon?.fit()
+    term?.scrollToBottom()
+  }
+  window.addEventListener('resize', handleResize)
+  
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', handleResize)
+    unlisten?.()
+    compactUnlisten?.()
+    resizeObserver?.disconnect()
+    term?.dispose()
+    if (activityTimeout) clearTimeout(activityTimeout)
+    if (ledTimeout) clearTimeout(ledTimeout)
+    if (linkTimeout) clearTimeout(linkTimeout)
+  })
 })
 
 function clearTerminal() {
@@ -347,298 +285,340 @@ function clearTerminal() {
 </script>
 
 <style scoped>
-.terminal-panel {
-  flex: 1;
-  background: #090b10;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  height: 100%;
-  overflow: hidden;
+.tactical-hud-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  padding: 24px;
 }
 
-/* ━━━ Breadcrumb bar ━━━ */
+.hud-panel {
+  position: absolute;
+  background: rgba(13, 16, 23, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px);
+  padding: 12px 14px;
+  border-radius: 8px;
+  min-width: 140px;
+  z-index: 30;
+}
+
+.hud-top-right {
+  top: 40px;
+  right: 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hud-stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.hud-label {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.hud-value {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--accent-blue);
+  font-weight: 700;
+}
+
+.hud-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.08);
+  margin: 4px 0;
+}
+
+.hud-context-group { display: flex; flex-direction: column; gap: 6px; }
+.hud-progress-track { height: 3px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; }
+.hud-progress-fill { height: 100%; border-radius: 2px; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+.hud-progress-fill.ok      { background: var(--accent-teal); box-shadow: 0 0 8px rgba(30,207,160,0.4); }
+.hud-progress-fill.warning { background: var(--accent-amber); box-shadow: 0 0 8px rgba(245,158,11,0.4); }
+.hud-progress-fill.danger  { background: var(--accent-red); box-shadow: 0 0 8px rgba(239,68,68,0.4); }
+
+.hud-context-meta { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-secondary); margin-top: 2px; }
+.hud-model-id { opacity: 0.5; }
+
+.node-indicator {
+  position: absolute;
+  top: 40px;
+  left: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  z-index: 30;
+}
+
+.node-signal { width: 4px; height: 4px; border-radius: 50%; background: var(--text-muted); }
+.node-active .node-signal { background: var(--accent-blue); animation: signal-pulse 1.5s infinite; }
+@keyframes signal-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.5); } }
+
+.node-text { font-family: var(--font-mono); font-size: 0.58rem; font-weight: 700; color: var(--text-muted); letter-spacing: 0.1em; }
+.node-active .node-text { color: var(--accent-blue); }
+
+/* Layout Structure */
+.terminal-panel {
+  flex: 1;
+  background: #050608;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
 .breadcrumb-bar {
+  height: 48px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 36px;
-  padding: 0 12px;
-  background: var(--bg-surface-1);
-  border-bottom: 1px solid var(--border-subtle);
-  flex-shrink: 0;
-  gap: 8px;
-}
-
-.breadcrumb-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow: hidden;
-}
-
-/* Status Badge */
-.status-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--bg-surface-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  transition: all 0.3s;
-}
-.status-badge.is-active {
-  color: var(--accent-teal);
-  border-color: rgba(30, 207, 160, 0.3);
-  background: rgba(30, 207, 160, 0.05);
-}
-.status-badge.is-booting {
-  color: var(--accent-blue);
-  border-color: rgba(79, 156, 249, 0.3);
-  animation: pulse-border 1s infinite alternate;
-}
-
-@keyframes pulse-border {
-  from { border-color: rgba(79, 156, 249, 0.2); }
-  to { border-color: rgba(79, 156, 249, 0.6); }
-}
-
-.status-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.is-active .status-dot { animation: pulse-dot 1.2s infinite; }
-
-.breadcrumb-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  background: rgba(13, 16, 23, 0.4);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
   flex-shrink: 0;
 }
 
-/* Dual LEDs */
-.telemetry-leds {
-  display: flex;
-  gap: 12px;
-}
-.led-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.led-label {
-  font-family: var(--font-mono);
-  font-size: 0.5rem;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  opacity: 0.5;
-}
-.led-bulb {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #1a1e2a;
-  transition: background 0.05s, box-shadow 0.05s;
-}
-.led-flash-blue {
-  background: var(--accent-blue);
-  box-shadow: 0 0 10px var(--accent-blue);
-}
-.led-flash-white {
-  background: #fff;
-  box-shadow: 0 0 10px #fff;
-}
-
-.crumb {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  white-space: nowrap;
-}
-
-.crumb-sep {
-  font-size: 0.65rem;
-  color: var(--border-subtle);
-  opacity: 0.3;
-}
-
-.agent-crumb  { color: var(--accent-teal); }
-.model-crumb  { color: var(--text-secondary); opacity: 0.7; }
-
-/* Path Crumb Animated */
-.path-crumb {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 8px;
-  background: rgba(255,255,255,0.02);
-  border: 1px solid transparent;
-  border-radius: 4px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  overflow: hidden;
-}
-.path-crumb:hover {
-  background: rgba(255,255,255,0.05);
-  border-color: var(--border-subtle);
-  color: var(--text-secondary);
-}
-.path-crumb.is-linking {
-  background: rgba(79, 156, 249, 0.05);
-  color: var(--accent-blue);
-}
-.path-cursor {
-  font-size: 0.8rem;
-  animation: cursor-blink 0.2s steps(2) infinite;
-  margin-left: 1px;
-}
-@keyframes cursor-blink { to { opacity: 0; } }
-
-/* ━━━ Tab bar ━━━ */
 .tab-bar {
-  display: flex;
-  align-items: center;
   height: 38px;
-  padding: 0 8px;
-  background: var(--bg-surface-1);
-  border-bottom: 1px solid var(--border-subtle);
-  flex-shrink: 0;
-  gap: 4px;
-}
-
-.session-tabs { display: flex; gap: 2px; }
-
-.term-tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   padding: 0 10px;
-  height: 28px;
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  cursor: pointer;
-}
-.term-tab.active { background: var(--bg-surface-3); color: var(--text-primary); border-color: var(--border-subtle); }
-.tab-icon { opacity: 0.4; }
-.active .tab-icon { color: var(--accent-blue); opacity: 1; }
-
-.tab-bar-spacer { flex: 1; }
-
-.term-controls { display: flex; align-items: center; gap: 4px; }
-.font-size-val { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); min-width: 30px; text-align: center; }
-.sep-v { width: 1px; height: 14px; background: var(--border-subtle); margin: 0 4px; }
-
-.icon-btn {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 4px;
+  background: rgba(13, 16, 23, 0.2);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  flex-shrink: 0;
 }
-.icon-btn:hover { color: var(--text-primary); background: var(--bg-surface-2); }
 
-/* ━━━ Tactical Viewport ━━━ */
+.breadcrumb-left, .breadcrumb-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  display: none;
+}
+
 .terminal-viewport-wrapper {
   position: relative;
   flex: 1;
-  margin: 12px;
-  background: #090b10;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  background: #080a0f;
   overflow: hidden;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
 }
 
-.terminal-viewport-wrapper.is-streaming {
-  border-color: rgba(79, 156, 249, 0.6);
-  box-shadow: 0 10px 40px rgba(0,0,0,0.5), 0 0 20px rgba(79, 156, 249, 0.08);
-}
-.terminal-viewport-wrapper.is-idle {
-  opacity: 0.95;
-}
-
-/* Carbon Grid Overlay */
-.carbon-grid-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: 
-    linear-gradient(rgba(255,255,255,0.015) 1.5px, transparent 1.5px),
-    linear-gradient(90deg, rgba(255,255,255,0.015) 1.5px, transparent 1.5px);
-  background-size: 35px 35px;
-  z-index: 1;
-}
-
-/* CRT Scanlines */
-.scanline-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    rgba(18, 16, 16, 0) 50%,
-    rgba(0, 0, 0, 0.06) 50%
-  );
-  background-size: 100% 4px;
-  z-index: 2;
-  opacity: 0.2;
-}
-
-/* Tactical Brackets */
-.tactical-bracket {
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  border: 1.5px solid rgba(255,255,255,0.1);
-  pointer-events: none;
-  z-index: 10;
-}
-.top-left     { top: 12px; left: 12px; border-right: 0; border-bottom: 0; }
-.top-right    { top: 12px; right: 12px; border-left: 0; border-bottom: 0; }
-.bottom-left  { bottom: 12px; left: 12px; border-right: 0; border-top: 0; }
-.bottom-right { bottom: 12px; right: 12px; border-left: 0; border-top: 0; }
-
 .terminal-container {
   flex: 1;
-  padding: 24px 28px 16px;
+  padding: 24px 32px;
   overflow: hidden;
-  min-height: 0;
-  z-index: 5;
+  z-index: 10;
 }
 
-.terminal-container :deep(.xterm) {
+/* Agent & Model Badges */
+.agent-badge, .model-badge {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  height: 28px;
+  padding: 0 10px;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.agent-badge { 
+  background: rgba(30, 207, 160, 0.03);
+  border-color: rgba(30, 207, 160, 0.25);
+  animation: badge-pulse 4s infinite alternate;
+}
+
+.agent-icon-wrapper { color: var(--accent-teal); display: flex; align-items: center; }
+.agent-info { display: flex; flex-direction: column; justify-content: center; line-height: 1; }
+.agent-label { font-size: 0.45rem; font-weight: 800; color: var(--text-muted); letter-spacing: 0.08em; }
+.agent-name { font-size: 0.65rem; font-weight: 900; color: var(--accent-teal); letter-spacing: 0.02em; }
+.agent-status-tag { background: rgba(30, 207, 160, 0.15); color: var(--accent-teal); font-size: 0.4rem; padding: 1px 4px; border-radius: 2px; font-weight: 900; }
+
+.model-badge { background: rgba(124, 106, 249, 0.02); border-color: rgba(124, 106, 249, 0.2); }
+.model-id { font-family: var(--font-mono); font-size: 0.5rem; color: var(--text-muted); opacity: 0.5; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 8px; }
+.model-name { font-size: 0.62rem; font-weight: 700; color: var(--accent-blue); }
+
+.tactical-coordinate {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  height: 28px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.coord-tag {
+  background: rgba(79, 156, 249, 0.1);
+  color: var(--accent-blue);
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  font-weight: 900;
+  padding: 0 10px;
   height: 100%;
-  width: 100%;
-}
-.terminal-container :deep(.xterm-viewport) {
-  background: transparent !important;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid rgba(79, 156, 249, 0.2);
 }
 
-/* Premium Glowing Cursor */
+.coord-content { padding: 0 12px; font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-secondary); }
+
+/* Controls */
+.term-controls-wrapper { display: flex; align-items: center; margin-left: auto; gap: 12px; padding-right: 12px; }
+.font-stepper {
+  display: flex;
+  align-items: center;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 20px;
+  height: 24px;
+  overflow: hidden;
+  padding: 0 4px;
+}
+
+.step-btn {
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  color: var(--accent-blue);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.step-btn:hover { opacity: 1; color: var(--text-primary); }
+
+.font-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 30px;
+  justify-content: center;
+  padding: 0 4px;
+}
+.font-val { font-size: 0.62rem; font-weight: 800; color: var(--accent-blue); }
+.font-unit { font-size: 0.4rem; font-weight: 900; color: var(--text-muted); }
+
+.term-tab {
+  padding: 0 14px;
+  height: 24px;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.term-tab.active { 
+  background: linear-gradient(135deg, rgba(79, 156, 249, 0.15), rgba(79, 156, 249, 0.05)); 
+  color: var(--accent-blue); 
+  border-color: rgba(79, 156, 249, 0.3); 
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+@keyframes badge-pulse {
+  from { border-color: rgba(30, 207, 160, 0.2); box-shadow: 0 0 5px rgba(30, 207, 160, 0.02); }
+  to { border-color: rgba(30, 207, 160, 0.4); box-shadow: 0 0 10px rgba(30, 207, 160, 0.05); }
+}
+
+@keyframes blink { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+
+/* Grid & Scanlines */
+.carbon-grid-overlay { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(79, 156, 249, 0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(79, 156, 249, 0.02) 1px, transparent 1px); background-size: 32px 32px; z-index: 1; }
+.scanline-overlay { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(rgba(0,0,0,0) 50%, rgba(0, 0, 0, 0.05) 50%); background-size: 100% 4px; z-index: 2; opacity: 0.1; }
+
+.terminal-viewport-wrapper.rotation-glitch {
+  animation: glitch-anim 0.35s ease-out;
+  border-color: var(--accent-amber);
+}
+
+@keyframes glitch-anim {
+  0% { transform: translate(0); filter: brightness(1) hue-rotate(0deg); }
+  20% { transform: translate(-2px, 1px); filter: brightness(1.8) hue-rotate(90deg); }
+  40% { transform: translate(2px, -1px); filter: brightness(1.2) contrast(1.5); }
+  60% { transform: translate(-1px, -1px); filter: contrast(1.2) hue-rotate(-45deg); opacity: 0.8; }
+  80% { transform: translate(1px, 1px); filter: brightness(1.5); }
+  100% { transform: translate(0); filter: brightness(1); }
+}
+
 .terminal-container :deep(.xterm-cursor) {
-  box-shadow: 0 0 12px rgba(79, 156, 249, 0.6);
+  box-shadow: 0 0 12px var(--accent-blue);
   border-radius: 1px;
+}
+
+.term-tab {
+  padding: 0 12px;
+  height: 28px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+.term-tab.active { background: rgba(79, 156, 249, 0.12); color: var(--accent-blue); border-color: rgba(79, 156, 249, 0.2); }
+
+.term-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 8px;
+}
+
+.font-size-val {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  min-width: 32px;
+  text-align: center;
+}
+
+.icon-btn { 
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--text-muted); 
+  transition: all 0.2s; 
+}
+.icon-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+
+.sep-v {
+  width: 1px;
+  height: 14px;
+  background: rgba(255,255,255,0.08);
+  margin: 0 4px;
 }
 </style>
 
